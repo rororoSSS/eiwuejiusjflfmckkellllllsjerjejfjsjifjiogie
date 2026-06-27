@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>終極霓虹火柴人 - 點陣靈動版</title>
-    <!-- 引入 MediaPipe 必要組件，包含 Pose 偵測 -->
+    <title>終極霓虹火柴人 - 卡通線條版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -61,7 +60,7 @@
 </head>
 <body>
 
-    <p id="loading">終極可愛火柴人系統載入中...</p>
+    <p id="loading">動態卡通火柴人系統載入中...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -108,7 +107,7 @@
             latestHandResults = results;
         });
 
-        // 3. 初始化 Pose (保留身體、肩膀與手臂)
+        // 3. 初始化 Pose
         const pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
@@ -122,27 +121,9 @@
             latestPoseResults = results;
         });
 
-        // 定義左右眼外圈路徑
-        const LEFT_EYE_PATH = [33, 160, 158, 133, 153, 144];
-        const RIGHT_EYE_PATH = [362, 385, 387, 263, 373, 380];
-        
-        // 嘴唇定義：61是左嘴角，291是右嘴角
-        // 下嘴唇邊緣特徵點（從左到右順序）
-        const LOWER_LIP_PATH = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291];
-
-        // 畫封闭或開放眼部路徑的輔助函式
-        function drawPath(ctx, landmarks, pathIndices, closePath = true) {
-            if (!landmarks || pathIndices.length === 0) return;
-            ctx.beginPath();
-            const firstPt = landmarks[pathIndices[0]];
-            if (firstPt) ctx.moveTo(firstPt.x * canvasElement.width, firstPt.y * canvasElement.height);
-            
-            for (let i = 1; i < pathIndices.length; i++) {
-                const pt = landmarks[pathIndices[i]];
-                if (pt) ctx.lineTo(pt.x * canvasElement.width, pt.y * canvasElement.height);
-            }
-            if (closePath) ctx.closePath();
-            ctx.stroke();
+        // 計算兩點距離的輔助函式
+        function getDistance(p1, p2) {
+            return Math.hypot(p1.x - p2.x, p1.y - p2.y);
         }
 
         // 4. 霓虹繪圖迴圈
@@ -154,68 +135,94 @@
             }
 
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.shadowBlur = 12;
+            canvasCtx.shadowBlur = 15;
 
-            // ─── 繪製可愛版面部 (眼睛 + D字型嘴巴) ───
+            const w = canvasElement.width;
+            const h = canvasElement.height;
+
+            // ─── 繪製五官（線條化 & 卡通化） ───
             if (latestFaceResults && latestFaceResults.multiFaceLandmarks && latestFaceResults.multiFaceLandmarks.length > 0) {
                 const landmarks = latestFaceResults.multiFaceLandmarks[0];
                 
                 canvasCtx.shadowColor = '#00ffcc';
                 canvasCtx.strokeStyle = '#00ffcc';
-                canvasCtx.lineWidth = 3;
+                canvasCtx.fillStyle = '#00ffcc';
+                canvasCtx.lineWidth = 4;
+                canvasCtx.lineCap = 'round';
 
-                // 1. 畫左眼與右眼（完美眨眼）
-                drawPath(canvasCtx, landmarks, LEFT_EYE_PATH, true);
-                drawPath(canvasCtx, landmarks, RIGHT_EYE_PATH, true);
+                // --- 眼睛偵測與繪製 ---
+                // 左眼上下瞼點：159, 145 ； 右眼上下瞼點：386, 374
+                // 眼睛中心點：左473，右468
+                const leftTop = landmarks[159], leftBottom = landmarks[145], leftCenter = landmarks[473];
+                const rightTop = landmarks[386], rightBottom = landmarks[374], rightCenter = landmarks[468];
 
-                // 2. 畫 D 字型可愛嘴巴（照 image_987903.png 修改）
-                const leftCorner = landmarks[61];  // 左嘴角
-                const rightCorner = landmarks[291]; // 右嘴角
-
-                if (leftCorner && rightCorner) {
-                    canvasCtx.beginPath();
-                    // 上嘴唇：直接從左嘴角連一條平直的直線到右嘴角
-                    canvasCtx.moveTo(leftCorner.x * canvasElement.width, leftCorner.y * canvasElement.height);
-                    canvasCtx.lineTo(rightCorner.x * canvasElement.width, rightCorner.y * canvasElement.height);
-                    
-                    // 下嘴唇：順著下緣弧度的點連回去，組合成卡通大笑嘴
-                    for (let i = 1; i < LOWER_LIP_PATH.length; i++) {
-                        const pt = landmarks[LOWER_LIP_PATH[i]];
-                        if (pt) canvasCtx.lineTo(pt.x * canvasElement.width, pt.y * canvasElement.height);
+                // 判斷左眼眨眼
+                if (leftTop && leftBottom && leftCenter) {
+                    const eyeDist = getDistance(leftTop, leftBottom);
+                    if (eyeDist > 0.015) { // 睜眼：畫實心圓點
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(leftCenter.x * w, leftCenter.y * h, 7, 0, 2 * Math.PI);
+                        canvasCtx.fill();
+                    } else { // 眨眼：畫一條可愛的水平線
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo((leftCenter.x - 0.02) * w, leftCenter.y * h);
+                        canvasCtx.lineTo((leftCenter.x + 0.02) * w, leftCenter.y * h);
+                        canvasCtx.stroke();
                     }
-                    canvasCtx.closePath();
+                }
+
+                // 判斷右眼眨眼
+                if (rightTop && rightBottom && rightCenter) {
+                    const eyeDist = getDistance(rightTop, rightBottom);
+                    if (eyeDist > 0.015) { // 睜眼：畫實心圓點
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(rightCenter.x * w, rightCenter.y * h, 7, 0, 2 * Math.PI);
+                        canvasCtx.fill();
+                    } else { // 眨眼：畫一條可愛的水平線
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo((rightCenter.x - 0.02) * w, rightCenter.y * h);
+                        canvasCtx.lineTo((rightCenter.x + 0.02) * w, rightCenter.y * h);
+                        canvasCtx.stroke();
+                    }
+                }
+
+                // --- 嘴巴改為單條微笑彎線 ---
+                const leftCorner = landmarks[61];   // 左嘴角
+                const rightCorner = landmarks[291]; // 右嘴角
+                const bottomLip = landmarks[17];    // 下嘴唇下緣中心
+
+                if (leftCorner && rightCorner && bottomLip) {
+                    canvasCtx.beginPath();
+                    // 從左嘴角出發
+                    canvasCtx.moveTo(leftCorner.x * w, leftCorner.y * h);
+                    // 利用下嘴唇中心作為控制點，畫出一條平滑的微笑曲線到右嘴角
+                    canvasCtx.quadraticCurveTo(bottomLip.x * w, bottomLip.y * h, rightCorner.x * w, rightCorner.y * h);
                     canvasCtx.stroke();
                 }
-                
-                // 【已移除】原本在這裡的鼻子中心點 (Landmark 1) 已經完全拿掉了！
             }
 
-            // ─── 繪製上半身骨架 (Pose: 肩膀與手臂) ───
+            // ─── 繪製身體骨架（肩膀與手臂） ───
             if (latestPoseResults && latestPoseResults.poseLandmarks) {
                 const poseLandmarks = latestPoseResults.poseLandmarks;
-                canvasCtx.shadowColor = '#00ffcc'; // 身體和臉部用同色系，看起來更一體化
+                canvasCtx.shadowColor = '#00ffcc';
                 canvasCtx.strokeStyle = '#00ffcc';
-                canvasCtx.lineWidth = 4;
+                canvasCtx.lineWidth = 5;
 
-                // 我們只連線火柴人的上半身（肩膀與雙臂），避開凌亂的臉部跟下半身點
-                // 11:左肩, 12:右肩, 13:左肘, 14:右肘, 15:左腕, 16:右腕
-                const pt11 = poseLandmarks[11];
-                const pt12 = poseLandmarks[12];
-                const pt13 = poseLandmarks[13];
-                const pt14 = poseLandmarks[14];
-                const pt15 = poseLandmarks[15];
-                const pt16 = poseLandmarks[16];
-                const w = canvasElement.width;
-                const h = canvasElement.height;
+                const pt11 = poseLandmarks[11]; // 左肩
+                const pt12 = poseLandmarks[12]; // 右肩
+                const pt13 = poseLandmarks[13]; // 左肘
+                const pt14 = poseLandmarks[14]; // 右肘
+                const pt15 = poseLandmarks[15]; // 左腕
+                const pt16 = poseLandmarks[16]; // 右腕
 
-                // 畫肩膀連線
+                // 畫肩膀
                 if (pt11 && pt12 && pt11.visibility > 0.5 && pt12.visibility > 0.5) {
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(pt11.x * w, pt11.y * h);
                     canvasCtx.lineTo(pt12.x * w, pt12.y * h);
                     canvasCtx.stroke();
                 }
-                // 畫左手臂 (肩 -> 肘 -> 腕)
+                // 左手臂
                 if (pt11 && pt13 && pt15 && pt13.visibility > 0.5) {
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(pt11.x * w, pt11.y * h);
@@ -223,7 +230,7 @@
                     canvasCtx.lineTo(pt15.x * w, pt15.y * h);
                     canvasCtx.stroke();
                 }
-                // 畫右手臂 (肩 -> 肘 -> 腕)
+                // 右手臂
                 if (pt12 && pt14 && pt16 && pt14.visibility > 0.5) {
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(pt12.x * w, pt12.y * h);
@@ -233,14 +240,27 @@
                 }
             }
 
-            // ─── 繪製精細手部 (Hands) ───
+            // ─── 繪製手部（只留骨架線，完全不畫任何點！） ───
             if (latestHandResults && latestHandResults.multiHandLandmarks) {
-                canvasCtx.shadowColor = '#ff0055'; // 手部維持顯眼的霓虹桃紅
-                for (const landmarks of latestHandResults.multiHandLandmarks) {
-                    drawLandmarks(canvasCtx, landmarks, { color: '#ff0055', lineWidth: 1, radius: 2 });
-                    const connections = window.HAND_CONNECTIONS || (typeof HAND_CONNECTIONS !== 'undefined' ? HAND_CONNECTIONS : null);
-                    if (connections) {
-                        drawConnectors(canvasCtx, landmarks, connections, { color: '#ffffff', lineWidth: 2 });
+                canvasCtx.shadowColor = '#ff0055'; 
+                canvasCtx.strokeStyle = '#ffffff'; // 手部線條用純白，搭配粉紅霓虹發光
+                canvasCtx.lineWidth = 3;
+
+                const connections = window.HAND_CONNECTIONS || (typeof HAND_CONNECTIONS !== 'undefined' ? HAND_CONNECTIONS : null);
+                
+                if (connections) {
+                    for (const landmarks of latestHandResults.multiHandLandmarks) {
+                        // 我們在這裡不用 drawLandmarks (因為它會畫點)，改用自訂的純線條繪製
+                        for (const connection of connections) {
+                            const firstPt = landmarks[connection[0]];
+                            const secondPt = landmarks[connection[1]];
+                            if (firstPt && secondPt) {
+                                canvasCtx.beginPath();
+                                canvasCtx.moveTo(firstPt.x * w, firstPt.y * h);
+                                canvasCtx.lineTo(secondPt.x * w, secondPt.y * h);
+                                canvasCtx.stroke();
+                            }
+                        }
                     }
                 }
             }
@@ -268,7 +288,7 @@
             if (videoElement.readyState >= 2) {
                 await faceMesh.send({ image: videoElement });
                 await hands.send({ image: videoElement });
-                await pose.send({ image: videoElement }); // 同步處理身體骨架
+                await pose.send({ image: videoElement });
             }
             requestAnimationFrame(tickAI);
         }
