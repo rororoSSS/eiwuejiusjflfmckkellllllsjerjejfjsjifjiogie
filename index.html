@@ -161,7 +161,7 @@
                     const eyeDist = getDistance(leftTop, leftBottom);
                     if (eyeDist > 0.015) { // 睜眼：畫實心圓點
                         canvasCtx.beginPath();
-                        canvasCtx.arc(leftCenter.x * w, leftCenter.y * h, 15, 0, 2 * Math.PI);
+                        canvasCtx.arc(leftCenter.x * w, leftCenter.y * h, 30, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { // 眨眼：畫一條可愛的水平線
                         canvasCtx.beginPath();
@@ -176,7 +176,7 @@
                     const eyeDist = getDistance(rightTop, rightBottom);
                     if (eyeDist > 0.015) { // 睜眼：畫實心圓點
                         canvasCtx.beginPath();
-                        canvasCtx.arc(rightCenter.x * w, rightCenter.y * h, 15, 0, 2 * Math.PI);
+                        canvasCtx.arc(rightCenter.x * w, rightCenter.y * h, 30, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { // 眨眼：畫一條可愛的水平線
                         canvasCtx.beginPath();
