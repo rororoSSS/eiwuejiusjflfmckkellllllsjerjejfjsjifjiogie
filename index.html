@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>終極靈動火柴人 - 表情解鎖版</title>
+    <title>終極霓虹火柴人 - 點陣靈動版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -12,7 +12,7 @@
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             text-align: center;
             background-color: #000000;
-            color: #00ff55;
+            color: #00ffcc;
             margin: 0;
             padding: 0;
             height: 100vh;
@@ -30,7 +30,7 @@
             border-radius: 20px;
             overflow: hidden;
             background-color: #000000;
-            box-shadow: 0 0 40px rgba(0, 255, 85, 0.15);
+            box-shadow: 0 0 40px rgba(0, 255, 170, 0.2);
             transform: scaleX(-1); /* 鏡像翻轉 */
         }
         #webcam {
@@ -47,20 +47,19 @@
         #loading {
             position: absolute;
             z-index: 3;
-            color: #00ff55;
+            color: #00ffcc;
             font-weight: bold;
             background: rgba(0,0,0,0.85);
             padding: 14px 28px;
             border-radius: 30px;
             font-size: 0.9rem;
-            border: 1px solid #00ff55;
-            box-shadow: 0 0 15px rgba(0,255,85,0.4);
+            border: 1px solid #00ffcc;
         }
     </style>
 </head>
 <body>
 
-    <p id="loading">高靈敏表情系統同步中...</p>
+    <p id="loading">終極表情點陣系統載入中...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -77,13 +76,13 @@
         let latestFaceResults = null;
         let latestHandResults = null;
 
-        // 1. 初始化高精度 Face Mesh
+        // 1. 初始化 Face Mesh
         const faceMesh = new FaceMesh({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
         });
         faceMesh.setOptions({
             maxNumFaces: 1,
-            refineLandmarks: true, // 開啟眼瞳與嘴唇細節優化
+            refineLandmarks: true, // 加強眼睛和嘴唇的精密偵測
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
@@ -106,32 +105,13 @@
             latestHandResults = results;
         });
 
-        // 定義嘴唇外圈與眼框的特定關鍵點點陣，用來畫出精簡版面具
-        // 這些數字對應 MediaPipe 臉部 468 個點中的特定部位
-        const MOUTH_OUTLINE = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185];
-        const LEFT_EYE_OUTLINE = [33, 160, 158, 133, 153, 144];
-        const RIGHT_EYE_OUTLINE = [362, 385, 387, 263, 373, 380];
+        // 【精選核心點】只選出眼睛輪廓與嘴唇輪廓的硬體點 ID，不畫整張臉
+        // 嘴唇外圈
+        const LIPS = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
+        // 左眼與右眼輪廓
+        const EYES = [33, 160, 158, 133, 153, 144, 362, 385, 387, 263, 373, 380];
 
-        // 輔助繪圖函式：將指定的點連接成封閉閉合線條
-        function drawPathFromIndices(ctx, landmarks, indices, color, lineWidth) {
-            if (!landmarks || indices.length === 0) return;
-            ctx.beginPath();
-            const firstPt = landmarks[indices[0]];
-            ctx.moveTo(firstPt.x * canvasElement.width, firstPt.y * canvasElement.height);
-            
-            for (let i = 1; i < indices.length; i++) {
-                const pt = landmarks[indices[i]];
-                ctx.lineTo(pt.x * canvasElement.width, pt.y * canvasElement.height);
-            }
-            ctx.closePath();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = lineWidth;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.stroke();
-        }
-
-        // 3. 霓虹渲染迴圈
+        // 3. 霓虹繪圖迴圈
         function drawScene() {
             if (canvasElement.width !== videoElement.videoWidth && videoElement.videoWidth > 0) {
                 canvasElement.width = videoElement.videoWidth;
@@ -139,36 +119,52 @@
                 containerElement.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
             }
 
+            // 清除畫布，維持純黑
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.shadowBlur = 15;
-            
-            // ─── 繪製精簡靈動面部 (Face) ───
-            if (latestFaceResults && latestFaceResults.multiFaceLandmarks) {
+            canvasCtx.shadowBlur = 12;
+
+            // ─── 繪製精簡面部 ───
+            if (latestFaceResults && latestFaceResults.multiFaceLandmarks && latestFaceResults.multiFaceLandmarks.length > 0) {
                 const landmarks = latestFaceResults.multiFaceLandmarks[0];
-                canvasCtx.shadowColor = '#00aaff'; // 面部霓虹藍
+                canvasCtx.shadowColor = '#00ffcc'; // 面部霓虹藍綠色
+                canvasCtx.fillStyle = '#00ffcc';
 
-                // 1. 畫出嘴唇外圈輪廓（這行能完美跟隨你張嘴、大笑、搞怪的形狀！）
-                drawPathFromIndices(canvasCtx, landmarks, MOUTH_OUTLINE, '#00aaff', 4);
+                // 1. 畫嘴唇點陣（嘴巴一動，點點會立刻跟著位移！）
+                LIPS.forEach(index => {
+                    const pt = landmarks[index];
+                    if (pt) {
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 3, 0, 2 * Math.PI);
+                        canvasCtx.fill();
+                    }
+                });
 
-                // 2. 畫出雙眼輪廓，取代原本呆滯的圓點
-                drawPathFromIndices(canvasCtx, landmarks, LEFT_EYE_OUTLINE, '#00aaff', 3);
-                drawPathFromIndices(canvasCtx, landmarks, RIGHT_EYE_OUTLINE, '#00aaff', 3);
+                // 2. 畫眼睛點陣
+                EYES.forEach(index => {
+                    const pt = landmarks[index];
+                    if (pt) {
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 2.5, 0, 2 * Math.PI);
+                        canvasCtx.fill();
+                    }
+                });
 
-                // 3. 補上一顆鼻子核心點 (Index: 1)
-                const nosePt = landmarks[1];
-                if (nosePt) {
-                    canvasCtx.beginPath();
-                    canvasCtx.arc(nosePt.x * canvasElement.width, nosePt.y * canvasElement.height, 4, 0, 2 * Math.PI);
+                // 3. 畫一個亮白色的鼻子中心點
+                const nose = landmarks[1];
+                if (nose) {
+                    canvasCtx.shadowColor = '#ffffff';
                     canvasCtx.fillStyle = '#ffffff';
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(nose.x * canvasElement.width, nose.y * canvasElement.height, 5, 0, 2 * Math.PI);
                     canvasCtx.fill();
                 }
             }
 
             // ─── 繪製精細手部骨架 (Hands) ───
             if (latestHandResults && latestHandResults.multiHandLandmarks) {
-                canvasCtx.shadowColor = '#00ff55'; // 手部霓虹綠
+                canvasCtx.shadowColor = '#ff0055'; // 手部換個對比色：霓虹桃紅
                 for (const landmarks of latestHandResults.multiHandLandmarks) {
-                    drawLandmarks(canvasCtx, landmarks, { color: '#00ff55', lineWidth: 1, radius: 2 });
+                    drawLandmarks(canvasCtx, landmarks, { color: '#ff0055', lineWidth: 1, radius: 2 });
                     if (typeof HAND_CONNECTIONS !== 'undefined') {
                         drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 2 });
                     }
@@ -181,7 +177,7 @@
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+                    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
                 });
                 videoElement.srcObject = stream;
