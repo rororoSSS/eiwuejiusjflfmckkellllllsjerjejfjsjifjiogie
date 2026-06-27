@@ -59,7 +59,7 @@
 </head>
 <body>
 
-    <p id="loading">終極表情點陣系統載入中...</p>
+    <p id="loading">終極表情連線系統載入中...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -105,11 +105,36 @@
             latestHandResults = results;
         });
 
-        // 【精選核心點】只選出眼睛輪廓與嘴唇輪廓的硬體點 ID，不畫整張臉
-        // 嘴唇外圈
-        const LIPS = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78];
-        // 左眼與右眼輪廓
-        const EYES = [33, 160, 158, 133, 153, 144, 362, 385, 387, 263, 373, 380];
+        // 【調整：依據時鐘/逆時針方向排序的特徵點，方便直接連成線圈】
+        // 嘴唇外圈連線順序
+        const LIPS_PATH = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95];
+        // 左眼外圈連線順序
+        const LEFT_EYE_PATH = [33, 160, 158, 133, 153, 144];
+        // 右眼外圈連線順序
+        const RIGHT_EYE_PATH = [362, 385, 387, 263, 373, 380];
+
+        // 輔助函式：用線段連接一組特徵點
+        function drawPath(ctx, landmarks, pathIndices, closePath = true) {
+            if (!landmarks || pathIndices.length === 0) return;
+            
+            ctx.beginPath();
+            const firstPt = landmarks[pathIndices[0]];
+            if (firstPt) {
+                ctx.moveTo(firstPt.x * canvasElement.width, firstPt.y * canvasElement.height);
+            }
+            
+            for (let i = 1; i < pathIndices.length; i++) {
+                const pt = landmarks[pathIndices[i]];
+                if (pt) {
+                    ctx.lineTo(pt.x * canvasElement.width, pt.y * canvasElement.height);
+                }
+            }
+            
+            if (closePath) {
+                ctx.closePath();
+            }
+            ctx.stroke();
+        }
 
         // 3. 霓虹繪圖迴圈
         function drawScene() {
@@ -123,33 +148,23 @@
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.shadowBlur = 12;
 
-            // ─── 繪製精簡面部 ───
+            // ─── 繪製連線面部 ───
             if (latestFaceResults && latestFaceResults.multiFaceLandmarks && latestFaceResults.multiFaceLandmarks.length > 0) {
                 const landmarks = latestFaceResults.multiFaceLandmarks[0];
+                
+                // 設定五官線條風格
                 canvasCtx.shadowColor = '#00ffcc'; // 面部霓虹藍綠色
-                canvasCtx.fillStyle = '#00ffcc';
+                canvasCtx.strokeStyle = '#00ffcc';
+                canvasCtx.lineWidth = 3; // 線條粗細
 
-                // 1. 畫嘴唇點陣（嘴巴一動，點點會立刻跟著位移！）
-                LIPS.forEach(index => {
-                    const pt = landmarks[index];
-                    if (pt) {
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 3, 0, 2 * Math.PI);
-                        canvasCtx.fill();
-                    }
-                });
+                // 1. 畫嘴唇連線（會隨張嘴、閉嘴即時動態伸縮縮放）
+                drawPath(canvasCtx, landmarks, LIPS_PATH, true);
 
-                // 2. 畫眼睛點陣
-                EYES.forEach(index => {
-                    const pt = landmarks[index];
-                    if (pt) {
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 2.5, 0, 2 * Math.PI);
-                        canvasCtx.fill();
-                    }
-                });
+                // 2. 畫左眼與右眼連線（眨眼時，上下線段會閉合，完美呈現開張動作）
+                drawPath(canvasCtx, landmarks, LEFT_EYE_PATH, true);
+                drawPath(canvasCtx, landmarks, RIGHT_EYE_PATH, true);
 
-                // 3. 畫一個亮白色的鼻子中心點
+                // 3. 畫一個亮白色的鼻子中心點（保留作為點綴）
                 const nose = landmarks[1];
                 if (nose) {
                     canvasCtx.shadowColor = '#ffffff';
@@ -164,9 +179,13 @@
             if (latestHandResults && latestHandResults.multiHandLandmarks) {
                 canvasCtx.shadowColor = '#ff0055'; // 手部換個對比色：霓虹桃紅
                 for (const landmarks of latestHandResults.multiHandLandmarks) {
+                    // 繪製手部關節點
                     drawLandmarks(canvasCtx, landmarks, { color: '#ff0055', lineWidth: 1, radius: 2 });
-                    if (typeof HAND_CONNECTIONS !== 'undefined') {
-                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 2 });
+                    
+                    // 修正：安全地引用 MediaPipe 的手部連線常數
+                    const connections = window.HAND_CONNECTIONS || (typeof HAND_CONNECTIONS !== 'undefined' ? HAND_CONNECTIONS : null);
+                    if (connections) {
+                        drawConnectors(canvasCtx, landmarks, connections, { color: '#ffffff', lineWidth: 2 });
                     }
                 }
             }
