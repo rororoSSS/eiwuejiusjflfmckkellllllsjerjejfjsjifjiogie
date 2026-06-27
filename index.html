@@ -166,7 +166,7 @@
                     if (eyeDist > 0.015) { 
                         // 睜眼：這裡的 18 就是圓圈大小，改成 25 或 30 就會超級大！
                         canvasCtx.beginPath();
-                        canvasCtx.arc(centerX, centerY, 30, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { 
                         // 眨眼：一條橫線
@@ -187,7 +187,7 @@
                     if (eyeDist > 0.015) { 
                         // 睜眼：右眼大小，記得跟左眼一樣大
                         canvasCtx.beginPath();
-                        canvasCtx.arc(centerX, centerY, 30, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { 
                         // 眨眼：一條橫線
@@ -209,7 +209,7 @@
                 if (leftCorner && rightCorner && bottomLip) {
                     // 【黃金上移係數】0.3 代表把嘴巴往眼睛的方向拉近 30%
                     // 如果想讓嘴巴再往上移更多，可以把 0.3 改成 0.4 或 0.5！
-                    const shiftFactor = 0.3; 
+                    const shiftFactor = 0.4; 
 
                     // 計算上移後的全新 Y 座標
                     const newLeftY = (leftCorner.y - (leftCorner.y - leftEyeY) * shiftFactor) * h;
