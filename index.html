@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極速乾杯產生器</title>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #222; color: white; }
+        video, canvas { width: 90%; max-width: 400px; border-radius: 10px; margin: 10px 0; }
+        button { padding: 15px 30px; font-size: 18px; border-radius: 25px; border: none; background: #ff4757; color: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🍻 極速乾杯試作機</h1>
+    <p id="status">準備錄製第 1 隻手...</p>
+    <video id="preview" autoplay muted playsinline></video>
+    <br>
+    <button id="actionBtn">開始錄影 (3秒)</button>
+    <br>
+    <canvas id="resultCanvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('preview');
+        const actionBtn = document.getElementById('actionBtn');
+        const status = document.getElementById('status');
+        const canvas = document.getElementById('resultCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let count = 0;
+        let videoElements = [];
+        let stream;
+
+        // 啟動相機
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+            .then(s => { stream = s; video.srcObject = s; });
+
+        actionBtn.onclick = () => {
+            if (count < 3) {
+                actionBtn.disabled = true;
+                status.innerText = `正在錄製第 ${count + 1} 隻手...`;
+                
+                // 模擬錄影：直接抓取當下影片的 3 秒片段（這邊簡化為抓取當前畫面建立一個隱藏的播放器）
+                const v = document.createElement('video');
+                v.srcObject = stream;
+                v.autoplay = true;
+                v.muted = true;
+                v.playsinline = true;
+                videoElements.push(v);
+
+                setTimeout(() => {
+                    count++;
+                    actionBtn.disabled = false;
+                    if (count === 3) {
+                        status.innerText = "三人集齊！開始魔幻合成...";
+                        actionBtn.style.display = 'none';
+                        video.style.display = 'none';
+                        startSynthesis();
+                    } else {
+                        status.innerText = `第 ${count} 隻手錄製完成，請換下一位...`;
+                    }
+                }, 3000); // 錄製 3 秒
+            }
+        };
+
+        function startSynthesis() {
+            canvas.style.display = 'inline-block';
+            canvas.width = 640;
+            canvas.height = 480;
+
+            function drawFrame() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 畫背景 (隨便塗個夜店風顏色)
+                ctx.fillStyle = '#1e1e24';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 瘋狂拼貼：把三個鏡頭畫面，用不同的位置和半透明度疊在一起（透視怪怪的精髓）
+                if(videoElements[0]) ctx.drawImage(videoElements[0], 0, 100, 300, 300);
+                if(videoElements[1]) ctx.drawImage(videoElements[1], 340, 100, 300, 300);
+                if(videoElements[2]) ctx.drawImage(videoElements[2], 170, 0, 300, 300);
+
+                // 加個乾杯字樣
+                ctx.fillStyle = '#ffff00';
+                ctx.font = 'bold 40px Arial';
+                ctx.fillText('CHEERS!! 🍻', 200, 430);
+
+                requestAnimationFrame(drawFrame);
+            }
+            drawFrame();
+        }
+    </script>
+</body>
+</html>
