@@ -166,7 +166,7 @@
                     if (eyeDist > 0.015) { 
                         // 睜眼：這裡的 18 就是圓圈大小，改成 25 或 30 就會超級大！
                         canvasCtx.beginPath();
-                        canvasCtx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 12, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { 
                         // 眨眼：一條橫線
@@ -187,7 +187,7 @@
                     if (eyeDist > 0.015) { 
                         // 睜眼：右眼大小，記得跟左眼一樣大
                         canvasCtx.beginPath();
-                        canvasCtx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 12, 0, 2 * Math.PI);
                         canvasCtx.fill();
                     } else { 
                         // 眨眼：一條橫線
@@ -198,29 +198,27 @@
                     }
                 }
 
-                // --- 嘴巴改為單條微笑彎線（修正上移可愛版） ---
+                // --- 嘴巴改為單條直線（呆萌上移版） ---
                 const leftCorner = landmarks[61];   // 左嘴角
                 const rightCorner = landmarks[291]; // 右嘴角
-                const bottomLip = landmarks[17];    // 下嘴唇下緣中心
                 
-                // 為了參考眼睛的高度，我們抓剛剛計算好的眼睛基準點（或是直接抓眼睛特徵點）
+                // 參考眼睛的高度來做上移
                 const leftEyeY = landmarks[133] ? landmarks[133].y : 0.4; 
 
-                if (leftCorner && rightCorner && bottomLip) {
+                if (leftCorner && rightCorner) {
                     // 【黃金上移係數】0.3 代表把嘴巴往眼睛的方向拉近 30%
-                    // 如果想讓嘴巴再往上移更多，可以把 0.3 改成 0.4 或 0.5！
-                    const shiftFactor = 0.4; 
+                    // 如果想讓嘴巴再往上移，可以改為 0.4 或 0.5
+                    const shiftFactor = 0.3; 
 
-                    // 計算上移後的全新 Y 座標
+                    // 計算上移後的左、右嘴角 Y 座標
                     const newLeftY = (leftCorner.y - (leftCorner.y - leftEyeY) * shiftFactor) * h;
                     const newRightY = (rightCorner.y - (rightCorner.y - leftEyeY) * shiftFactor) * h;
-                    const newBottomY = (bottomLip.y - (bottomLip.y - leftEyeY) * shiftFactor) * h;
 
                     canvasCtx.beginPath();
-                    // 從上移後的左嘴角出發
+                    // 從左嘴角出發
                     canvasCtx.moveTo(leftCorner.x * w, newLeftY);
-                    // 利用上移後的下嘴唇中心作為控制點，畫出完美的微笑曲線到右嘴角
-                    canvasCtx.quadraticCurveTo(bottomLip.x * w, newBottomY, rightCorner.x * w, newRightY);
+                    // 【關鍵修改】直接用 lineTo 連成一條無奈的直線到右嘴角
+                    canvasCtx.lineTo(rightCorner.x * w, newRightY);
                     canvasCtx.stroke();
                 }
             }
