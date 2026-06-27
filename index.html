@@ -3,50 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pages 手部骨架辨識</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <title>GitHub Pages 電腦版手勢辨識</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             text-align: center;
             background-color: #1c1c1e;
             color: white;
             margin: 0;
             padding: 20px;
         }
-        .container {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            margin: 20px auto;
+        h2 {
+            margin-bottom: 20px;
         }
-        /* 隱藏原始影像，我們只看畫有骨架的畫布 */
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px; /* 電腦版標準寬度 */
+            margin: 0 auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background-color: #000;
+            
+            /* 關鍵：透過鏡像翻轉整個容器，讓視訊畫面與骨架一起像照鏡子一樣自然 */
+            transform: scaleX(-1); 
+        }
         #webcam {
-            display: none;
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: contain; /* 確保影片依原始比例縮放，絕不拉伸變形 */
         }
         #output_canvas {
-            transform: scaleX(-1); /* 鏡像翻轉，讓畫面跟照鏡子一樣自然 */
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
-            border-radius: 10px;
+            z-index: 2;
         }
         #loading {
-            font-size: 1.2rem;
             color: #ffcc00;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <h1>MediaPipe 手部骨架即時偵測</h1>
-    <p id="loading">AI 模型載入中，請稍候...</p>
+    <h2>筆電鏡頭 骨架即時偵測 (電腦版)</h2>
+    <p id="loading">AI 模型載入中，請允許網頁開啟相機...</p>
 
-    <div class="container">
-        <video id="webcam" autoplay playsinline></video>
-        <canvas id="output_canvas" width="640" height="480"></canvas>
+    <div class="video-container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="output_canvas"></canvas>
     </div>
 
     <script>
@@ -55,57 +67,75 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        // 當 AI 辨識出結果時的「繪圖邏輯」
+        // 初始化 MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        // AI 偵測結果回傳
         function onResults(results) {
-            // 隱藏載入中文字
-            if (loadingText) {
-                loadingText.style.display = 'none';
+            if (loadingText) loadingText.style.display = 'none';
+
+            // 確保畫布解析度與影片實際解析度完全一模一樣，防止骨架錯位或變形
+            if (canvasElement.width !== videoElement.videoWidth) {
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
             }
 
-            // 清除畫布並重新繪製當前影像
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-            // 如果有偵測到手，就把骨架畫上去
+            
+            // 這裡同樣不重複畫 results.image，直接讓底層 <video> 顯示，畫布只疊加線條
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    // 畫關節點
+                    // 畫關節點 (紅色)
                     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
-                    // 畫連接線
+                    // 畫連接線 (綠色)
                     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 }
             }
             canvasCtx.restore();
         }
 
-        // 初始化 MediaPipe Hands 模型
-        const hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }
-        });
-
-        // 模型參數設定
-        hands.setOptions({
-            maxNumHands: 2,             // 最多偵測兩隻手
-            modelComplexity: 1,         // 模型複雜度 (0輕量, 1中等)
-            minDetectionConfidence: 0.5, // 偵測連貫性信心門檻
-            minTrackingConfidence: 0.5   // 追蹤信心門檻
-        });
-
         hands.onResults(onResults);
 
-        // 啟動相機並將畫面不斷丟給 AI 模型處理
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 640,
-            height: 480
-        });
-        
-        camera.start();
+        // 啟動電腦相機
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: "user", // 使用前置/筆電鏡頭
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
+                videoElement.srcObject = stream;
+                
+                videoElement.addEventListener('loadedmetadata', () => {
+                    tick();
+                });
+            } catch (err) {
+                alert("無法開啟筆電鏡頭，請確認是否給予瀏覽器相機權限！錯誤: " + err);
+            }
+        }
+
+        // 偵測迴圈
+        async function tick() {
+            if (videoElement.readyState >= 2) {
+                await hands.send({ image: videoElement });
+            }
+            requestAnimationFrame(tick);
+        }
+
+        window.addEventListener('DOMContentLoaded', startCamera);
     </script>
 </body>
 </html>
