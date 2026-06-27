@@ -2,34 +2,43 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GitHub Pages 後置相機手勢辨識</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             text-align: center;
-            background-color: #1c1c1e;
+            background-color: #000000;
             color: white;
             margin: 0;
-            padding: 10px;
+            padding: 0;
+            overflow: hidden; /* 防止手機網頁上下橡皮筋滾動 */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
-        .container {
+        .video-wrapper {
             position: relative;
-            width: 100%;
-            max-width: 480px; /* 適合手機螢幕寬度 */
-            margin: 10px auto;
-            /* 利用 padding-top 鎖定 4:3 畫面比例，防止畫面變形 */
-            padding-top: 133.33%; 
+            width: 90vw;             /* 寬度佔滿螢幕九成 */
+            height: calc(90vw * 1.333); /* 強制鎖定手機標準 3:4 直式比例，絕對不變形 */
+            max-width: 480px;
+            max-height: 640px;
+            border-radius: 16px;
             overflow: hidden;
-            border-radius: 10px;
-            background-color: #000;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            background: #1c1c1e;
         }
-        /* 隱藏原始 video，只顯示 canvas */
         #webcam {
-            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* 讓影像填滿容器，多餘的裁切，確保不拉伸壓扁 */
         }
         #output_canvas {
             position: absolute;
@@ -37,21 +46,25 @@
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover; /* 確保影像填滿容器且不拉伸變形 */
+            z-index: 2;
         }
         #loading {
-            font-size: 1rem;
+            position: absolute;
+            z-index: 3;
             color: #ffcc00;
+            font-weight: bold;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 20px;
         }
     </style>
 </head>
 <body>
 
-    <h2 style="font-size: 1.5rem; margin-bottom: 5px;">後置鏡頭骨架偵測</h2>
-    <p id="loading">AI 模型與主鏡頭載入中...</p>
+    <p id="loading">正在強制隱藏前鏡頭，開啟後置主鏡頭...</p>
 
-    <div class="container">
-        <video id="webcam" autoplay playsinline></video>
+    <div class="video-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
         <canvas id="output_canvas"></canvas>
     </div>
 
@@ -61,24 +74,34 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        function onResults(results) {
-            if (loadingText) {
-                loadingText.style.display = 'none';
-            }
+        // 初始化 MediaPipe 手部辨識
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
 
-            // 動態調整 canvas 的內部解析度，使其與相機輸入的實際畫質一致，避免模糊與變形
-            if (canvasElement.width !== results.image.width || canvasElement.height !== results.image.height) {
-                canvasElement.width = results.image.width;
-                canvasElement.height = results.image.height;
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
+
+        // 偵測結果渲染
+        function onResults(results) {
+            if (loadingText) loadingText.style.display = 'none';
+
+            // 隨時修正畫布解析度，對齊影片實際輸入畫質，徹底防變形
+            if (canvasElement.width !== videoElement.videoWidth) {
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
             }
 
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             
-            // 正常繪製影像（不進行鏡像翻轉，因為是後置鏡頭看別人的視角）
-            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            // 注意：這裡不畫 results.image，因為底層的 <video> 已經用 object-fit: cover 完美無變形地顯示在畫面上了！
+            // 我們只在 canvas 上「疊加」骨架線條即可。
 
-            // 繪製手部骨架
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
                     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
@@ -88,33 +111,60 @@
             canvasCtx.restore();
         }
 
-        // 初始化 MediaPipe
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-
-        hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
         hands.onResults(onResults);
 
-        // 啟動相機：指定使用後置鏡頭 (environment)
-        const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            facingMode: 'environment', // 關鍵設定：強制指定後置主鏡頭
-            width: 640,
-            height: 480
-        });
-        
-        camera.start().catch(err => {
-            alert("無法開啟後置鏡頭，請檢查權限設定。錯誤: " + err);
-        });
+        // 使用瀏覽器原生 MediaDevices 強制指定後置鏡頭
+        async function startCamera() {
+            const constraints = {
+                video: {
+                    // exact 代表「強烈強制」，如果沒有後置鏡頭就報錯，不允許它自動隨機切回前鏡頭
+                    facingMode: { exact: "environment" }, 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = stream;
+                
+                // 當影片成功載入並取得尺寸時，啟動 AI 偵測迴圈
+                videoElement.addEventListener('loadedmetadata', () => {
+                    canvasElement.width = videoElement.videoWidth;
+                    canvasElement.height = videoElement.videoHeight;
+                    tick();
+                });
+            } catch (err) {
+                console.error("強制後置鏡頭失敗，嘗試放寬標準的後置鏡頭... ", err);
+                // 備用方案：如果有些手機瀏覽器不支援 exact，改用一般 environment 請求
+                try {
+                    const backupStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: "environment" },
+                        audio: false
+                    });
+                    videoElement.srcObject = backupStream;
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        canvasElement.width = videoElement.videoWidth;
+                        canvasElement.height = videoElement.videoHeight;
+                        tick();
+                    });
+                } catch (backupErr) {
+                    alert("無法獲取後置主鏡頭，請確認在手機瀏覽器中允許了相機權限！");
+                }
+            }
+        }
+
+        // 用瀏覽器最順暢的幀率，不斷把相機畫面送給 AI 模型
+        async function tick() {
+            if (videoElement.readyState >= 2) {
+                await hands.send({ image: videoElement });
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // 頁面載入後直接啟動
+        window.addEventListener('DOMContentLoaded', startCamera);
     </script>
 </body>
 </html>
