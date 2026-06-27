@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pages 手部骨架辨識</title>
+    <title>GitHub Pages 後置相機手勢辨識</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -14,39 +14,45 @@
             background-color: #1c1c1e;
             color: white;
             margin: 0;
-            padding: 20px;
+            padding: 10px;
         }
         .container {
             position: relative;
-            width: 640px;
-            height: 480px;
-            margin: 20px auto;
+            width: 100%;
+            max-width: 480px; /* 適合手機螢幕寬度 */
+            margin: 10px auto;
+            /* 利用 padding-top 鎖定 4:3 畫面比例，防止畫面變形 */
+            padding-top: 133.33%; 
+            overflow: hidden;
+            border-radius: 10px;
+            background-color: #000;
         }
-        /* 隱藏原始影像，我們只看畫有骨架的畫布 */
+        /* 隱藏原始 video，只顯示 canvas */
         #webcam {
             display: none;
         }
         #output_canvas {
-            transform: scaleX(-1); /* 鏡像翻轉，讓畫面跟照鏡子一樣自然 */
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000;
-            border-radius: 10px;
+            object-fit: cover; /* 確保影像填滿容器且不拉伸變形 */
         }
         #loading {
-            font-size: 1.2rem;
+            font-size: 1rem;
             color: #ffcc00;
         }
     </style>
 </head>
 <body>
 
-    <h1>MediaPipe 手部骨架即時偵測</h1>
-    <p id="loading">AI 模型載入中，請稍候...</p>
+    <h2 style="font-size: 1.5rem; margin-bottom: 5px;">後置鏡頭骨架偵測</h2>
+    <p id="loading">AI 模型與主鏡頭載入中...</p>
 
     <div class="container">
         <video id="webcam" autoplay playsinline></video>
-        <canvas id="output_canvas" width="640" height="480"></canvas>
+        <canvas id="output_canvas"></canvas>
     </div>
 
     <script>
@@ -55,57 +61,60 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        // 當 AI 辨識出結果時的「繪圖邏輯」
         function onResults(results) {
-            // 隱藏載入中文字
             if (loadingText) {
                 loadingText.style.display = 'none';
             }
 
-            // 清除畫布並重新繪製當前影像
+            // 動態調整 canvas 的內部解析度，使其與相機輸入的實際畫質一致，避免模糊與變形
+            if (canvasElement.width !== results.image.width || canvasElement.height !== results.image.height) {
+                canvasElement.width = results.image.width;
+                canvasElement.height = results.image.height;
+            }
+
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // 正常繪製影像（不進行鏡像翻轉，因為是後置鏡頭看別人的視角）
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-            // 如果有偵測到手，就把骨架畫上去
+            // 繪製手部骨架
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    // 畫關節點
                     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
-                    // 畫連接線
                     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 }
             }
             canvasCtx.restore();
         }
 
-        // 初始化 MediaPipe Hands 模型
+        // 初始化 MediaPipe
         const hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
 
-        // 模型參數設定
         hands.setOptions({
-            maxNumHands: 2,             // 最多偵測兩隻手
-            modelComplexity: 1,         // 模型複雜度 (0輕量, 1中等)
-            minDetectionConfidence: 0.5, // 偵測連貫性信心門檻
-            minTrackingConfidence: 0.5   // 追蹤信心門檻
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
         });
 
         hands.onResults(onResults);
 
-        // 啟動相機並將畫面不斷丟給 AI 模型處理
+        // 啟動相機：指定使用後置鏡頭 (environment)
         const camera = new Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({image: videoElement});
             },
+            facingMode: 'environment', // 關鍵設定：強制指定後置主鏡頭
             width: 640,
             height: 480
         });
         
-        camera.start();
+        camera.start().catch(err => {
+            alert("無法開啟後置鏡頭，請檢查權限設定。錯誤: " + err);
+        });
     </script>
 </body>
 </html>
