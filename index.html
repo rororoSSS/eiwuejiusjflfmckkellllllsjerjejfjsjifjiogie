@@ -2,40 +2,43 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pages 電腦版手勢辨識</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>跨平台手勢辨識 - 完美比例版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             text-align: center;
-            background-color: #1c1c1e;
+            background-color: #121214;
             color: white;
             margin: 0;
-            padding: 20px;
-        }
-        h2 {
-            margin-bottom: 20px;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
         }
         .video-container {
             position: relative;
-            width: 100%;
-            max-width: 640px; /* 電腦版標準寬度 */
-            margin: 0 auto;
-            border-radius: 12px;
+            width: 90vw;
+            max-width: 640px;
+            aspect-ratio: 3 / 4; /* 保持你剛剛滿意的完美比例 */
+            border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            background-color: #000;
-            
-            /* 關鍵：透過鏡像翻轉整個容器，讓視訊畫面與骨架一起像照鏡子一樣自然 */
-            transform: scaleX(-1); 
+            background-color: #1c1c1e;
+        }
+        /* 只有在使用前鏡頭(自拍/筆電)時才需要鏡像，後置鏡頭不要鏡像 */
+        .mirror {
+            transform: scaleX(-1);
         }
         #webcam {
             width: 100%;
-            height: auto;
-            display: block;
-            object-fit: contain; /* 確保影片依原始比例縮放，絕不拉伸變形 */
+            height: 100%;
+            object-fit: cover; /* 填滿容器，多餘裁切，保證畫面絕不壓扁變形 */
         }
         #output_canvas {
             position: absolute;
@@ -46,17 +49,22 @@
             z-index: 2;
         }
         #loading {
+            position: absolute;
+            z-index: 3;
             color: #ffcc00;
             font-weight: bold;
+            background: rgba(0,0,0,0.8);
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
 
-    <h2>筆電鏡頭 骨架即時偵測 (電腦版)</h2>
-    <p id="loading">AI 模型載入中，請允許網頁開啟相機...</p>
+    <p id="loading">AI 模型與鏡頭載入中...</p>
 
-    <div class="video-container">
+    <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="output_canvas"></canvas>
     </div>
@@ -64,6 +72,7 @@
     <script>
         const videoElement = document.getElementById('webcam');
         const canvasElement = document.getElementById('output_canvas');
+        const containerElement = document.getElementById('container');
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
@@ -79,25 +88,21 @@
             minTrackingConfidence: 0.5
         });
 
-        // AI 偵測結果回傳
         function onResults(results) {
             if (loadingText) loadingText.style.display = 'none';
 
-            // 確保畫布解析度與影片實際解析度完全一模一樣，防止骨架錯位或變形
             if (canvasElement.width !== videoElement.videoWidth) {
                 canvasElement.width = videoElement.videoWidth;
                 canvasElement.height = videoElement.videoHeight;
+                containerElement.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
             }
 
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             
-            // 這裡同樣不重複畫 results.image，直接讓底層 <video> 顯示，畫布只疊加線條
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    // 畫關節點 (紅色)
                     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
-                    // 畫連接線 (綠色)
                     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 }
             }
@@ -106,28 +111,52 @@
 
         hands.onResults(onResults);
 
-        // 啟動電腦相機
         async function startCamera() {
+            // 偵測是否為手機/平板
+            const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+            
+            // 關鍵改動：溫和地請求 environment (後置) 或 user (前置)
+            const constraints = {
+                video: {
+                    facingMode: isMobile ? "environment" : "user", 
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: "user", // 使用前置/筆電鏡頭
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
-                    audio: false
-                });
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 videoElement.srcObject = stream;
                 
+                // 檢查實際開啟的鏡頭是否為前置，若是前置（如筆電）才加上鏡像反轉
+                // 這樣可以確保手機後置鏡頭拍別人時，方向是正確的
+                setTimeout(() => {
+                    const track = stream.getVideoTracks()[0];
+                    const settings = track.getSettings();
+                    if (settings.facingMode === 'user' || !isMobile) {
+                        containerElement.classList.add('mirror');
+                    }
+                }, 500);
+
                 videoElement.addEventListener('loadedmetadata', () => {
                     tick();
                 });
             } catch (err) {
-                alert("無法開啟筆電鏡頭，請確認是否給予瀏覽器相機權限！錯誤: " + err);
+                console.error("相機開啟失敗，嘗試最終備用方案", err);
+                try {
+                    // 萬能備用方案：抓到什麼鏡頭就用什麼
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    videoElement.srcObject = fallbackStream;
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        tick();
+                    });
+                } catch (finalErr) {
+                    alert("無法獲取相機，請檢查瀏覽器的相機權限設定！");
+                }
             }
         }
 
-        // 偵測迴圈
         async function tick() {
             if (videoElement.readyState >= 2) {
                 await hands.send({ image: videoElement });
