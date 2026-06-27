@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跨平台手勢辨識 - 完美比例版</title>
+    <title>跨平台手勢辨識 - 強制後置鏡頭版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
@@ -25,20 +25,19 @@
             position: relative;
             width: 90vw;
             max-width: 640px;
-            aspect-ratio: 3 / 4; /* 保持你剛剛滿意的完美比例 */
+            aspect-ratio: 3 / 4; 
             border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             background-color: #1c1c1e;
         }
-        /* 只有在使用前鏡頭(自拍/筆電)時才需要鏡像，後置鏡頭不要鏡像 */
         .mirror {
             transform: scaleX(-1);
         }
         #webcam {
             width: 100%;
             height: 100%;
-            object-fit: cover; /* 填滿容器，多餘裁切，保證畫面絕不壓扁變形 */
+            object-fit: cover; 
         }
         #output_canvas {
             position: absolute;
@@ -62,7 +61,7 @@
 </head>
 <body>
 
-    <p id="loading">AI 模型與鏡頭載入中...</p>
+    <p id="loading">正在深度偵測手機硬體，強行切換後置主鏡頭...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -76,7 +75,7 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        // 初始化 MediaPipe Hands
+        // 初始化 MediaPipe
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
@@ -111,48 +110,66 @@
 
         hands.onResults(onResults);
 
+        // 【核心修正】尋找並強行綁定後置鏡頭
         async function startCamera() {
-            // 偵測是否為手機/平板
-            const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-            
-            // 關鍵改動：溫和地請求 environment (後置) 或 user (前置)
-            const constraints = {
-                video: {
-                    facingMode: isMobile ? "environment" : "user", 
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
-                audio: false
-            };
-
             try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                videoElement.srcObject = stream;
+                // 1. 先隨便要一個基礎權限，讓瀏覽器願意提供「硬體列表」
+                const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
                 
-                // 檢查實際開啟的鏡頭是否為前置，若是前置（如筆電）才加上鏡像反轉
-                // 這樣可以確保手機後置鏡頭拍別人時，方向是正確的
-                setTimeout(() => {
-                    const track = stream.getVideoTracks()[0];
-                    const settings = track.getSettings();
-                    if (settings.facingMode === 'user' || !isMobile) {
-                        containerElement.classList.add('mirror');
-                    }
-                }, 500);
+                // 2. 獲取所有鏡頭裝置
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                // 先把剛才暫時開啟的鏡頭關掉
+                initialStream.getTracks().forEach(track => track.stop());
 
-                videoElement.addEventListener('loadedmetadata', () => {
-                    tick();
-                });
+                let targetDeviceId = null;
+                const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+                if (isMobile) {
+                    // 3. 如果是手機，尋找名稱包含 back, environment 或 main 的鏡頭（通常最後一個是主鏡頭）
+                    const backCameras = videoDevices.filter(device => 
+                        device.label.toLowerCase().includes('back') || 
+                        device.label.toLowerCase().includes('environment') ||
+                        device.label.toLowerCase().includes('main') ||
+                        device.label.toLowerCase().includes('後置')
+                    );
+
+                    if (backCameras.length > 0) {
+                        // 拿最後一個（通常是高畫質的主鏡頭，前面可能是超廣角或微距）
+                        targetDeviceId = backCameras[backCameras.length - 1].deviceId;
+                    } else if (videoDevices.length > 1) {
+                        // 如果沒標籤但有多個鏡頭，通常後置鏡頭會在列表的後面
+                        targetDeviceId = videoDevices[videoDevices.length - 1].deviceId;
+                    }
+                }
+
+                // 4. 設定最終的強制參數
+                const constraints = {
+                    audio: false,
+                    video: targetDeviceId 
+                        ? { deviceId: { exact: targetDeviceId } } // 有找到主鏡頭 ID 就強行綁定
+                        : { facingMode: isMobile ? "environment" : "user" } // 沒找到就用預設
+                };
+
+                // 如果是電腦，或者是被迫開了前鏡頭，才加上鏡像
+                if (!targetDeviceId && (!isMobile || constraints.video.facingMode === 'user')) {
+                    containerElement.classList.add('mirror');
+                }
+
+                const finalStream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = finalStream;
+                videoElement.addEventListener('loadedmetadata', () => { tick(); });
+
             } catch (err) {
-                console.error("相機開啟失敗，嘗試最終備用方案", err);
+                console.error("終極鏡頭獲取失敗: ", err);
+                // 最底限的萬能備用
                 try {
-                    // 萬能備用方案：抓到什麼鏡頭就用什麼
-                    const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                     videoElement.srcObject = fallbackStream;
-                    videoElement.addEventListener('loadedmetadata', () => {
-                        tick();
-                    });
-                } catch (finalErr) {
-                    alert("無法獲取相機，請檢查瀏覽器的相機權限設定！");
+                    videoElement.addEventListener('loadedmetadata', () => { tick(); });
+                } catch (fErr) {
+                    alert("真的無法開啟相機，請確認是否在手機的『系統設定』中給予了瀏覽器完整相機權限！");
                 }
             }
         }
