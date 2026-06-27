@@ -3,89 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 科技感乾杯機</title>
+    <title>GitHub Pages 手部骨架辨識</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
-        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; padding: 20px; }
-        .container { position: relative; width: 90%; max-width: 500px; margin: 0 auto; }
-        video { display: none; } /* 隱藏原始鏡頭，我們只看 AI 畫布 */
-        canvas { width: 100%; border-radius: 15px; box-shadow: 0 0 20px rgba(0,255,255,0.3); background: #000; }
-        button { padding: 15px 30px; font-size: 18px; border-radius: 25px; border: none; background: #00cec9; color: black; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        #status { font-size: 18px; color: #00cec9; }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #1c1c1e;
+            color: white;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            margin: 20px auto;
+        }
+        /* 隱藏原始影像，我們只看畫有骨架的畫布 */
+        #webcam {
+            display: none;
+        }
+        #output_canvas {
+            transform: scaleX(-1); /* 鏡像翻轉，讓畫面跟照鏡子一樣自然 */
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            border-radius: 10px;
+        }
+        #loading {
+            font-size: 1.2rem;
+            color: #ffcc00;
+        }
     </style>
 </head>
 <body>
-    <h1>🍻 AI 手勢追蹤乾杯機</h1>
-    <p id="status">AI 模型載入中，請稍候...</p>
-    
+
+    <h1>MediaPipe 手部骨架即時偵測</h1>
+    <p id="loading">AI 模型載入中，請稍候...</p>
+
     <div class="container">
-        <video id="input_video" playsinline></video>
+        <video id="webcam" autoplay playsinline></video>
         <canvas id="output_canvas" width="640" height="480"></canvas>
     </div>
-    
-    <button id="recordBtn" disabled>開始 AI 追蹤錄製</button>
 
     <script>
-        const videoElement = document.getElementById('input_video');
+        const videoElement = document.getElementById('webcam');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d');
-        const statusText = document.getElementById('status');
-        const recordBtn = document.getElementById('recordBtn');
+        const loadingText = document.getElementById('loading');
 
-        let recordedFrames = [];
-        let isRecording = false;
-        let finalVideos = []; // 儲存三個人錄好的影格陣列
+        // 當 AI 辨識出結果時的「繪圖邏輯」
+        function onResults(results) {
+            // 隱藏載入中文字
+            if (loadingText) {
+                loadingText.style.display = 'none';
+            }
 
-        // 設定 MediaPipe Hands AI 模型
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-        
-        hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
-        // 當 AI 成功辨識出手的骨架時的處理邏輯
-        hands.onResults((results) => {
+            // 清除畫布並重新繪製當前影像
             canvasCtx.save();
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-            
-            // 畫出目前的鏡頭畫面
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-            
-            // 如果 AI 有抓到手，把骨架畫上去
+
+            // 如果有偵測到手，就把骨架畫上去
             if (results.multiHandLandmarks) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    // 畫關節點（紅色）
-                    for (let i = 0; i < landmarks.length; i++) {
-                        const x = landmarks[i].x * canvasElement.width;
-                        const y = landmarks[i].y * canvasElement.height;
-                        canvasCtx.beginPath();
-                        canvasCtx.arc(x, y, 5, 0, 2 * Math.PI);
-                        canvasCtx.fillStyle = '#ff7675';
-                        canvasCtx.fill();
-                    }
-                    
-                    // 偵測食指尖端的大概位置（可以用來代表杯子位置）
-                    const fingertip = landmarks[8];
-                    canvasCtx.fillStyle = '#00f5ff';
-                    canvasCtx.font = '16px sans-serif';
-                    canvasCtx.fillText("🍺 Glass Target", fingertip.x * canvasElement.width, fingertip.y * canvasElement.height - 10);
+                    // 畫關節點
+                    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+                    // 畫連接線
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
                 }
             }
             canvasCtx.restore();
+        }
 
-            // 如果正在錄製中，把這一幀的畫面存起來
-            if (isRecording) {
-                recordedFrames.push(canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height));
+        // 初始化 MediaPipe Hands 模型
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
             }
         });
 
-        // 啟動相機並連結 AI
+        // 模型參數設定
+        hands.setOptions({
+            maxNumHands: 2,             // 最多偵測兩隻手
+            modelComplexity: 1,         // 模型複雜度 (0輕量, 1中等)
+            minDetectionConfidence: 0.5, // 偵測連貫性信心門檻
+            minTrackingConfidence: 0.5   // 追蹤信心門檻
+        });
+
+        hands.onResults(onResults);
+
+        // 啟動相機並將畫面不斷丟給 AI 模型處理
         const camera = new Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({image: videoElement});
@@ -94,78 +105,7 @@
             height: 480
         });
         
-        camera.start().then(() => {
-            statusText.innerText = "AI 準備就緒！請按下按鈕錄製第一個人。";
-            recordBtn.disabled = false;
-        });
-
-        // 錄影按鈕邏輯
-        let clickCount = 0;
-        recordBtn.onclick = () => {
-            if (clickCount >= 3) return;
-            
-            isRecording = true;
-            recordedFrames = [];
-            recordBtn.disabled = true;
-            clickCount++;
-            statusText.innerText = `正在錄製第 ${clickCount} 個人 (帶 AI 骨架)...`;
-
-            setTimeout(() => {
-                isRecording = false;
-                finalVideos.push([...recordedFrames]); // 存下錄好的影像片段
-                recordBtn.disabled = false;
-
-                if (clickCount === 3) {
-                    statusText.innerText = "三人集齊！正在進行網頁端動態重疊...";
-                    recordBtn.style.display = 'none';
-                    startUltimateCheers();
-                } else {
-                    statusText.innerText = `第 ${clickCount} 個人錄製完畢，請換下一位。`;
-                }
-            }, 3000); // 錄製 3 秒
-        };
-
-        // 最終魔幻拼貼（把三個帶有 AI 骨架的影片影格同時疊加）
-        function startUltimateCheers() {
-            let frameIndex = 0;
-            
-            function playMix() {
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                
-                // 炫彩背景
-                canvasCtx.fillStyle = '#0a0a0f';
-                canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-                // 同時讀取三個影片的當前影格並拼貼
-                finalVideos.forEach((videoFrames, i) => {
-                    if (videoFrames[frameIndex]) {
-                        // 建立一個暫存的畫布來放這一格畫面，方便縮放調整
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = 640;
-                        tempCanvas.height = 480;
-                        tempCanvas.getContext('2d').putImageData(videoFrames[frameIndex], 0, 0);
-
-                        // 故意讓三個畫面交錯疊加（達成透視怪怪但好玩的拼貼效果）
-                        if (i === 0) canvasCtx.drawImage(tempCanvas, 0, 100, 320, 240);
-                        if (i === 1) canvasCtx.drawImage(tempCanvas, 320, 100, 320, 240);
-                        if (i === 2) canvasCtx.drawImage(tempCanvas, 160, 0, 320, 240);
-                    }
-                });
-
-                // 跑馬燈字樣
-                canvasCtx.fillStyle = '#00cec9';
-                canvasCtx.font = 'bold 36px sans-serif';
-                canvasCtx.fillText('🚀 AI CYBER CHEERS 🍻', 120, 420);
-
-                frameIndex++;
-                // 循環播放
-                if (frameIndex >= finalVideos[0].length) {
-                    frameIndex = 0;
-                }
-                setTimeout(playMix, 33); // 逼近 30 FPS 的播放速度
-            }
-            playMix();
-        }
+        camera.start();
     </script>
 </body>
 </html>
