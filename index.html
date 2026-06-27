@@ -150,53 +150,77 @@
                 canvasCtx.lineWidth = 4;
                 canvasCtx.lineCap = 'round';
 
-                // --- 眼睛偵測與繪製 ---
-                // 左眼上下瞼點：159, 145 ； 右眼上下瞼點：386, 374
-                // 眼睛中心點：左473，右468
-                const leftTop = landmarks[159], leftBottom = landmarks[145], leftCenter = landmarks[473];
-                const rightTop = landmarks[386], rightBottom = landmarks[374], rightCenter = landmarks[468];
+// --- 眼睛偵測與繪製（修正放大版） ---
+                // 左眼：33(外角), 133(內角), 159(上瞼), 145(下瞼)
+                // 右眼：362(內角), 263(外角), 386(上瞼), 374(下瞼)
+                const leftOuter = landmarks[33], leftInner = landmarks[133], leftTop = landmarks[159], leftBottom = landmarks[145];
+                const rightInner = landmarks[362], rightOuter = landmarks[263], rightTop = landmarks[386], rightBottom = landmarks[374];
 
-                // 判斷左眼眨眼
-                if (leftTop && leftBottom && leftCenter) {
+                // 1. 左眼繪製
+                if (leftOuter && leftInner && leftTop && leftBottom) {
+                    // 計算眼睛中心點 (x 和 y 的平均值)
+                    const centerX = (leftOuter.x + leftInner.x) / 2 * w;
+                    const centerY = (leftOuter.y + leftInner.y) / 2 * h;
                     const eyeDist = getDistance(leftTop, leftBottom);
-                    if (eyeDist > 0.015) { // 睜眼：畫實心圓點
+
+                    if (eyeDist > 0.015) { 
+                        // 睜眼：這裡的 18 就是圓圈大小，改成 25 或 30 就會超級大！
                         canvasCtx.beginPath();
-                        canvasCtx.arc(leftCenter.x * w, leftCenter.y * h, 30, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 30, 0, 2 * Math.PI);
                         canvasCtx.fill();
-                    } else { // 眨眼：畫一條可愛的水平線
+                    } else { 
+                        // 眨眼：一條橫線
                         canvasCtx.beginPath();
-                        canvasCtx.moveTo((leftCenter.x - 0.02) * w, leftCenter.y * h);
-                        canvasCtx.lineTo((leftCenter.x + 0.02) * w, leftCenter.y * h);
+                        canvasCtx.moveTo(centerX - 20, centerY);
+                        canvasCtx.lineTo(centerX + 20, centerY);
                         canvasCtx.stroke();
                     }
                 }
 
-                // 判斷右眼眨眼
-                if (rightTop && rightBottom && rightCenter) {
+                // 2. 右眼繪製
+                if (rightOuter && rightInner && rightTop && rightBottom) {
+                    // 計算眼睛中心點
+                    const centerX = (rightOuter.x + rightInner.x) / 2 * w;
+                    const centerY = (rightOuter.y + rightInner.y) / 2 * h;
                     const eyeDist = getDistance(rightTop, rightBottom);
-                    if (eyeDist > 0.015) { // 睜眼：畫實心圓點
+
+                    if (eyeDist > 0.015) { 
+                        // 睜眼：右眼大小，記得跟左眼一樣大
                         canvasCtx.beginPath();
-                        canvasCtx.arc(rightCenter.x * w, rightCenter.y * h, 30, 0, 2 * Math.PI);
+                        canvasCtx.arc(centerX, centerY, 30, 0, 2 * Math.PI);
                         canvasCtx.fill();
-                    } else { // 眨眼：畫一條可愛的水平線
+                    } else { 
+                        // 眨眼：一條橫線
                         canvasCtx.beginPath();
-                        canvasCtx.moveTo((rightCenter.x - 0.02) * w, rightCenter.y * h);
-                        canvasCtx.lineTo((rightCenter.x + 0.02) * w, rightCenter.y * h);
+                        canvasCtx.moveTo(centerX - 20, centerY);
+                        canvasCtx.lineTo(centerX + 20, centerY);
                         canvasCtx.stroke();
                     }
                 }
 
-                // --- 嘴巴改為單條微笑彎線 ---
+                // --- 嘴巴改為單條微笑彎線（修正上移可愛版） ---
                 const leftCorner = landmarks[61];   // 左嘴角
                 const rightCorner = landmarks[291]; // 右嘴角
                 const bottomLip = landmarks[17];    // 下嘴唇下緣中心
+                
+                // 為了參考眼睛的高度，我們抓剛剛計算好的眼睛基準點（或是直接抓眼睛特徵點）
+                const leftEyeY = landmarks[133] ? landmarks[133].y : 0.4; 
 
                 if (leftCorner && rightCorner && bottomLip) {
+                    // 【黃金上移係數】0.3 代表把嘴巴往眼睛的方向拉近 30%
+                    // 如果想讓嘴巴再往上移更多，可以把 0.3 改成 0.4 或 0.5！
+                    const shiftFactor = 0.3; 
+
+                    // 計算上移後的全新 Y 座標
+                    const newLeftY = (leftCorner.y - (leftCorner.y - leftEyeY) * shiftFactor) * h;
+                    const newRightY = (rightCorner.y - (rightCorner.y - leftEyeY) * shiftFactor) * h;
+                    const newBottomY = (bottomLip.y - (bottomLip.y - leftEyeY) * shiftFactor) * h;
+
                     canvasCtx.beginPath();
-                    // 從左嘴角出發
-                    canvasCtx.moveTo(leftCorner.x * w, leftCorner.y * h);
-                    // 利用下嘴唇中心作為控制點，畫出一條平滑的微笑曲線到右嘴角
-                    canvasCtx.quadraticCurveTo(bottomLip.x * w, bottomLip.y * h, rightCorner.x * w, rightCorner.y * h);
+                    // 從上移後的左嘴角出發
+                    canvasCtx.moveTo(leftCorner.x * w, newLeftY);
+                    // 利用上移後的下嘴唇中心作為控制點，畫出完美的微笑曲線到右嘴角
+                    canvasCtx.quadraticCurveTo(bottomLip.x * w, newBottomY, rightCorner.x * w, newRightY);
                     canvasCtx.stroke();
                 }
             }
