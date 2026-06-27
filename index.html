@@ -200,24 +200,59 @@
                     }
                 }
 
-                // --- 嘴巴繪製：純粹嘴角端點連線（完美同步旋轉與歪頭） ---
+// --- 嘴巴繪製：黃金比例縮短＋上抬版（完美同步旋轉與歪頭） ---
                 const leftCorner = landmarks[61];   // 左嘴角
                 const rightCorner = landmarks[291]; // 右嘴角
 
                 if (leftCorner && rightCorner) {
-                    // 如果你想讓嘴巴稍微往上提一點，看起來比較卡通、人中比較短：
-                    // 我們可以讓嘴巴的 Y 座標直接乘以 0.97（在畫布座標中，數值變小代表往上移動）
-                    // 這樣它不依賴眼睛，頭轉到哪，這條線的斜率就絕對跟著轉到哪！
-                    const heightOffset = 0.97; 
+                    // 1. 取得兩嘴角在畫布上的原始位置
+                    const lx = leftCorner.x * w;
+                    const ly = leftCorner.y * h;
+                    const rx = rightCorner.x * w;
+                    const ry = rightCorner.y * h;
 
-                    const startX = leftCorner.x * w;
-                    const startY = leftCorner.y * h * heightOffset;
-                    const endX = rightCorner.x * w;
-                    const endY = rightCorner.y * h * heightOffset;
+                    // 2. 計算原始嘴巴的中心點與長度向量
+                    const mouthCenterX = (lx + rx) / 2;
+                    const mouthCenterY = (ly + ry) / 2;
+                    const vectorX = rx - lx;
+                    const vectorY = ry - ly;
 
+                    // 3. 【調整參數一：嘴巴縮短】
+                    // 0.65 代表把嘴巴長度打 65 折（變短）。想更短可以改成 0.5，想長一點改成 0.8
+                    const shortenFactor = 0.65; 
+                    const halfShortX = (vectorX * shortenFactor) / 2;
+                    const halfShortY = (vectorY * shortenFactor) / 2;
+
+                    // 4. 【調整參數二：嘴巴上抬離眼睛近一點】
+                    // 抓取兩眼內角的中心點作為眼睛基準位置
+                    const eyeLX = landmarks[133].x * w;
+                    const eyeLY = landmarks[133].y * h;
+                    const eyeRX = landmarks[362].x * w;
+                    const eyeRY = landmarks[362].y * h;
+                    const eyeCenterX = (eyeLX + eyeRX) / 2;
+                    const eyeCenterY = (eyeLY + eyeRY) / 2;
+
+                    // 計算嘴巴到眼睛的中心向量
+                    const toEyeX = eyeCenterX - mouthCenterX;
+                    const toEyeY = eyeCenterY - mouthCenterY;
+
+                    // 0.45 代表把嘴巴往眼睛的方向推進 45% 的距離！
+                    // 如果希望嘴巴幾乎貼到眼睛下面，可以改成 0.55 或 0.6
+                    const liftFactor = 0.45; 
+                    
+                    const finalCenterX = mouthCenterX + toEyeX * liftFactor;
+                    const finalCenterY = mouthCenterY + toEyeY * liftFactor;
+
+                    // 5. 根據「新中心點」與「縮短後的向量」算出最終的左右端點
+                    const startX = finalCenterX - halfShortX;
+                    const startY = finalCenterY - halfShortY;
+                    const endX = finalCenterX + halfShortX;
+                    const endY = finalCenterY + halfShortY;
+
+                    // 6. 繪製絕對不會變形歪斜的 Q 版短直線嘴巴
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(startX, startY);
-                    canvasCtx.lineTo(endX, endY); // 真正的左右嘴角兩點連線
+                    canvasCtx.lineTo(endX, endY);
                     canvasCtx.stroke();
                 }
             }
