@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>霓虹火柴人動態捕捉</title>
+    <title>靈動霓虹火柴人</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -11,7 +11,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             text-align: center;
-            background-color: #000000; /* 純黑背景 */
+            background-color: #000000;
             color: #00ff55;
             margin: 0;
             padding: 0;
@@ -26,16 +26,15 @@
             position: relative;
             width: 90vw;
             max-width: 640px;
-            aspect-ratio: 3 / 4; /* 手機完美比例 */
+            aspect-ratio: 3 / 4; 
             border-radius: 20px;
             overflow: hidden;
             background-color: #000000;
-            /* 讓整個畫布帶有霓虹微光效果 */
             box-shadow: 0 0 40px rgba(0, 255, 85, 0.15);
-            transform: scaleX(-1); /* 鏡像翻轉，自拍更自然 */
+            transform: scaleX(-1); 
         }
         #webcam {
-            display: none; /* 徹底隱藏相機畫面 */
+            display: none; 
         }
         #output_canvas {
             position: absolute;
@@ -61,7 +60,7 @@
 </head>
 <body>
 
-    <p id="loading">霓虹火柴人系統初始化中...</p>
+    <p id="loading">表情表情系統同步中...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -78,7 +77,6 @@
         let latestPoseResults = null;
         let latestHandResults = null;
 
-        // 1. 初始化 Pose 模型（用來抓取簡約的身體、肩膀、眼睛、鼻子）
         const pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
@@ -93,7 +91,6 @@
             if (loadingText) loadingText.style.display = 'none';
         });
 
-        // 2. 初始化 Hands 模型（用來抓取精細的手指骨架）
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
@@ -107,7 +104,6 @@
             latestHandResults = results;
         });
 
-        // 3. 統一發光繪圖迴圈
         function drawScene() {
             if (canvasElement.width !== videoElement.videoWidth && videoElement.videoWidth > 0) {
                 canvasElement.width = videoElement.videoWidth;
@@ -115,47 +111,78 @@
                 containerElement.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
             }
 
-            // 清除畫布，維持全黑
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            // 設置 Canvas 開啟舞台霓虹燈發光效果（Glow Effect）
             canvasCtx.shadowBlur = 15;
             
-            // ─── 繪製簡約身體與五官骨架 (Pose) ───
+            // ─── 繪製身體與靈動面部 (Pose) ───
             if (latestPoseResults && latestPoseResults.poseLandmarks) {
                 const landmarks = latestPoseResults.poseLandmarks;
+                const w = canvasElement.width;
+                const h = canvasElement.height;
 
-                // 設定身體霓虹燈顏色：螢光藍色
-                canvasCtx.shadowColor = '#00aaff';
+                canvasCtx.shadowColor = '#00aaff'; // 軀幹與五官設為藍色霓虹
                 
-                // 畫出眼、鼻的科技點 (左眼:2, 右眼:5, 鼻子:0)
+                // 1. 畫出雙眼與鼻子 (左眼:2, 右眼:5, 鼻子:0)
                 const facePoints = [0, 2, 5];
                 facePoints.forEach(index => {
                     const pt = landmarks[index];
                     if (pt && pt.visibility > 0.5) {
                         canvasCtx.beginPath();
-                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
+                        canvasCtx.arc(pt.x * w, pt.y * h, 5, 0, 2 * Math.PI);
                         canvasCtx.fillStyle = '#ffffff';
                         canvasCtx.fill();
                     }
                 });
 
-                // 畫出肩膀與軀幹連接線 (簡約火柴人結構)
+                // 2. 【核心新增】動態霓虹嘴巴曲線邏輯
+                // Pose 模型中，11 是左嘴角，12 是右嘴角，0 是鼻子
+                const leftMouth = landmarks[9];  
+                const rightMouth = landmarks[10];
+                const nose = landmarks[0];
+
+                if (leftMouth && rightMouth && nose && leftMouth.visibility > 0.5 && rightMouth.visibility > 0.5) {
+                    const lx = leftMouth.x * w;
+                    const ly = leftMouth.y * h;
+                    const rx = rightMouth.x * w;
+                    const ry = rightMouth.y * h;
+                    const nx = nose.x * w;
+                    const ny = nose.y * h;
+
+                    // 計算兩嘴角的中點
+                    const midX = (lx + rx) / 2;
+                    const midY = (ly + ry) / 2;
+
+                    // 透過鼻子與嘴角中點的相對距離，來微調嘴巴下凹或上揚的「控制點」
+                    // 這樣當你大笑、張嘴或撇嘴時，曲線會跟著動態產生弧度！
+                    const controlX = midX;
+                    const controlY = midY + (midY - ny) * 0.2; // 依據面部比例動態計算下巴下垂度
+
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(lx, ly);
+                    // 畫出一條平滑的二次貝茲曲線
+                    canvasCtx.quadraticCurveTo(controlX, controlY, rx, ry);
+                    
+                    canvasCtx.strokeStyle = '#00aaff';
+                    canvasCtx.lineWidth = 4;
+                    canvasCtx.lineCap = 'round';
+                    canvasCtx.stroke();
+                }
+
+                // 3. 畫出身體骨架 (過濾掉原本混亂的臉部連線)
                 if (typeof POSE_CONNECTIONS !== 'undefined') {
-                    // 過濾掉臉部過於雜亂的線，只畫軀幹和四肢
-                    drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00aaff', lineWidth: 4 });
+                    // 這裡只過濾保留軀幹與四肢
+                    const filteredConnections = POSE_CONNECTIONS.filter(conn => conn[0] >= 11 && conn[1] >= 11);
+                    drawConnectors(canvasCtx, landmarks, filteredConnections, { color: '#00aaff', lineWidth: 4 });
                 }
             }
 
             // ─── 繪製精細手部骨架 (Hands) ───
             if (latestHandResults && latestHandResults.multiHandLandmarks) {
-                // 設定手指霓虹燈顏色：營光綠色/粉色
-                canvasCtx.shadowColor = '#00ff55';
-                
+                canvasCtx.shadowColor = '#00ff55'; // 手部設為綠色霓虹
                 for (const landmarks of latestHandResults.multiHandLandmarks) {
                     drawLandmarks(canvasCtx, landmarks, { color: '#00ff55', lineWidth: 1, radius: 2 });
                     if (typeof HAND_CONNECTIONS !== 'undefined') {
-                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 3 });
+                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 2 });
                     }
                 }
             }
@@ -163,7 +190,6 @@
             requestAnimationFrame(drawScene);
         }
 
-        // 4. 啟動相機與偵測
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
