@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>終極動態捕捉 - 臉部與手部</title>
+    <title>霓虹火柴人動態捕捉</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             text-align: center;
-            background-color: #000000; /* 純黑背景，更有科技感 */
-            color: #00ffcc;
+            background-color: #000000; /* 純黑背景 */
+            color: #00ff55;
             margin: 0;
             padding: 0;
             height: 100vh;
@@ -25,18 +26,16 @@
             position: relative;
             width: 90vw;
             max-width: 640px;
-            aspect-ratio: 3 / 4; /* 維持你最滿意的完美比例 */
-            border-radius: 16px;
+            aspect-ratio: 3 / 4; /* 手機完美比例 */
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 0 30px rgba(0, 255, 204, 0.3);
-            background-color: #050505;
-            
-            /* 自拍鏡頭（前置）必備：左右鏡像翻轉，才像照鏡子一樣自然 */
-            transform: scaleX(-1); 
+            background-color: #000000;
+            /* 讓整個畫布帶有霓虹微光效果 */
+            box-shadow: 0 0 40px rgba(0, 255, 85, 0.15);
+            transform: scaleX(-1); /* 鏡像翻轉，自拍更自然 */
         }
-        /* 核心關鍵：徹底隱藏原始相機影像 */
         #webcam {
-            display: none; 
+            display: none; /* 徹底隱藏相機畫面 */
         }
         #output_canvas {
             position: absolute;
@@ -49,19 +48,20 @@
         #loading {
             position: absolute;
             z-index: 3;
-            color: #00ffcc;
+            color: #00ff55;
             font-weight: bold;
-            background: rgba(0,0,0,0.8);
-            padding: 12px 24px;
+            background: rgba(0,0,0,0.85);
+            padding: 14px 28px;
             border-radius: 30px;
             font-size: 0.9rem;
-            border: 1px solid #00ffcc;
+            border: 1px solid #00ff55;
+            box-shadow: 0 0 15px rgba(0,255,85,0.4);
         }
     </style>
 </head>
 <body>
 
-    <p id="loading">終極動態捕捉模型載入中...</p>
+    <p id="loading">霓虹火柴人系統初始化中...</p>
 
     <div id="container" class="video-container">
         <video id="webcam" autoplay playsinline muted></video>
@@ -75,88 +75,117 @@
         const canvasCtx = canvasElement.getContext('2d');
         const loadingText = document.getElementById('loading');
 
-        // 1. 初始化 MediaPipe Holistic 模型 (全方位偵測)
-        const holistic = new Holistic({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
-        });
+        let latestPoseResults = null;
+        let latestHandResults = null;
 
-        holistic.setOptions({
+        // 1. 初始化 Pose 模型（用來抓取簡約的身體、肩膀、眼睛、鼻子）
+        const pose = new Pose({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+        });
+        pose.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
-
-        // 2. 收到 AI 結果時的繪圖邏輯
-        function onResults(results) {
+        pose.onResults(results => {
+            latestPoseResults = results;
             if (loadingText) loadingText.style.display = 'none';
+        });
 
-            // 隨時校正內部解析度
-            if (canvasElement.width !== videoElement.videoWidth) {
+        // 2. 初始化 Hands 模型（用來抓取精細的手指骨架）
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(results => {
+            latestHandResults = results;
+        });
+
+        // 3. 統一發光繪圖迴圈
+        function drawScene() {
+            if (canvasElement.width !== videoElement.videoWidth && videoElement.videoWidth > 0) {
                 canvasElement.width = videoElement.videoWidth;
                 canvasElement.height = videoElement.videoHeight;
                 containerElement.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
             }
 
-            // 清除上一影格，保持全黑背景
-            canvasCtx.save();
+            // 清除畫布，維持全黑
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 設置 Canvas 開啟舞台霓虹燈發光效果（Glow Effect）
+            canvasCtx.shadowBlur = 15;
             
-            // 【超級關鍵】這裡完全不呼叫 canvasCtx.drawImage()，所以背景會維持純黑！
+            // ─── 繪製簡約身體與五官骨架 (Pose) ───
+            if (latestPoseResults && latestPoseResults.poseLandmarks) {
+                const landmarks = latestPoseResults.poseLandmarks;
 
-            // ─── 繪製臉部網格 (Face Mesh) ───
-            if (results.faceLandmarks) {
-                drawLandmarks(canvasCtx, results.faceLandmarks, {
-                    color: '#00ffcc', 
-                    lineWidth: 0.5, // 臉部點很多，細線條才精緻
-                    radius: 0.5
+                // 設定身體霓虹燈顏色：螢光藍色
+                canvasCtx.shadowColor = '#00aaff';
+                
+                // 畫出眼、鼻的科技點 (左眼:2, 右眼:5, 鼻子:0)
+                const facePoints = [0, 2, 5];
+                facePoints.forEach(index => {
+                    const pt = landmarks[index];
+                    if (pt && pt.visibility > 0.5) {
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = '#ffffff';
+                        canvasCtx.fill();
+                    }
                 });
-                // 如果你想連臉部的線都畫出來，可以解開下一行的註釋（但畫面會比較滿）：
-                // drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {color: '#00ffcc', lineWidth: 0.5});
+
+                // 畫出肩膀與軀幹連接線 (簡約火柴人結構)
+                if (typeof POSE_CONNECTIONS !== 'undefined') {
+                    // 過濾掉臉部過於雜亂的線，只畫軀幹和四肢
+                    drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00aaff', lineWidth: 4 });
+                }
             }
 
-            // ─── 繪製左手骨架 ───
-            if (results.leftHandLandmarks) {
-                drawLandmarks(canvasCtx, results.leftHandLandmarks, {color: '#ff0055', lineWidth: 2, radius: 3});
-                drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 3});
+            // ─── 繪製精細手部骨架 (Hands) ───
+            if (latestHandResults && latestHandResults.multiHandLandmarks) {
+                // 設定手指霓虹燈顏色：營光綠色/粉色
+                canvasCtx.shadowColor = '#00ff55';
+                
+                for (const landmarks of latestHandResults.multiHandLandmarks) {
+                    drawLandmarks(canvasCtx, landmarks, { color: '#00ff55', lineWidth: 1, radius: 2 });
+                    if (typeof HAND_CONNECTIONS !== 'undefined') {
+                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 3 });
+                    }
+                }
             }
 
-            // ─── 繪製右手骨架 ───
-            if (results.rightHandLandmarks) {
-                drawLandmarks(canvasCtx, results.rightHandLandmarks, {color: '#00ff55', lineWidth: 2, radius: 3});
-                drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 3});
-            }
-
-            canvasCtx.restore();
+            requestAnimationFrame(drawScene);
         }
 
-        holistic.onResults(onResults);
-
-        // 3. 啟動自拍相機
+        // 4. 啟動相機與偵測
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: "user", // 認命使用自拍/筆電鏡頭
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: false
                 });
                 videoElement.srcObject = stream;
                 videoElement.addEventListener('loadedmetadata', () => {
-                    tick();
+                    drawScene();
+                    tickAI();
                 });
             } catch (err) {
-                alert("無法獲取鏡頭，請確認已允許相機權限！");
+                alert("無法開啟前置相機，請確認權限！");
             }
         }
 
-        async function tick() {
+        async function tickAI() {
             if (videoElement.readyState >= 2) {
-                await holistic.send({ image: videoElement });
+                await pose.send({ image: videoElement });
+                await hands.send({ image: videoElement });
             }
-            requestAnimationFrame(tick);
+            requestAnimationFrame(tickAI);
         }
 
         window.addEventListener('DOMContentLoaded', startCamera);
