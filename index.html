@@ -3,90 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>極速乾杯產生器</title>
+    <title>AI 科技感乾杯機</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
-        body { text-align: center; font-family: sans-serif; background: #222; color: white; }
-        video, canvas { width: 90%; max-width: 400px; border-radius: 10px; margin: 10px 0; }
-        button { padding: 15px 30px; font-size: 18px; border-radius: 25px; border: none; background: #ff4757; color: white; cursor: pointer; }
+        body { text-align: center; font-family: sans-serif; background: #111; color: white; margin: 0; padding: 20px; }
+        .container { position: relative; width: 90%; max-width: 500px; margin: 0 auto; }
+        video { display: none; } /* 隱藏原始鏡頭，我們只看 AI 畫布 */
+        canvas { width: 100%; border-radius: 15px; box-shadow: 0 0 20px rgba(0,255,255,0.3); background: #000; }
+        button { padding: 15px 30px; font-size: 18px; border-radius: 25px; border: none; background: #00cec9; color: black; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        #status { font-size: 18px; color: #00cec9; }
     </style>
 </head>
 <body>
-    <h1>🍻 極速乾杯試作機</h1>
-    <p id="status">準備錄製第 1 隻手...</p>
-    <video id="preview" autoplay muted playsinline></video>
-    <br>
-    <button id="actionBtn">開始錄影 (3秒)</button>
-    <br>
-    <canvas id="resultCanvas" style="display:none;"></canvas>
+    <h1>🍻 AI 手勢追蹤乾杯機</h1>
+    <p id="status">AI 模型載入中，請稍候...</p>
+    
+    <div class="container">
+        <video id="input_video" playsinline></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+    </div>
+    
+    <button id="recordBtn" disabled>開始 AI 追蹤錄製</button>
 
     <script>
-        const video = document.getElementById('preview');
-        const actionBtn = document.getElementById('actionBtn');
-        const status = document.getElementById('status');
-        const canvas = document.getElementById('resultCanvas');
-        const ctx = canvas.getContext('2d');
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusText = document.getElementById('status');
+        const recordBtn = document.getElementById('recordBtn');
+
+        let recordedFrames = [];
+        let isRecording = false;
+        let finalVideos = []; // 儲存三個人錄好的影格陣列
+
+        // 設定 MediaPipe Hands AI 模型
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
         
-        let count = 0;
-        let videoElements = [];
-        let stream;
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
 
-        // 啟動相機
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-            .then(s => { stream = s; video.srcObject = s; });
-
-        actionBtn.onclick = () => {
-            if (count < 3) {
-                actionBtn.disabled = true;
-                status.innerText = `正在錄製第 ${count + 1} 隻手...`;
-                
-                // 模擬錄影：直接抓取當下影片的 3 秒片段（這邊簡化為抓取當前畫面建立一個隱藏的播放器）
-                const v = document.createElement('video');
-                v.srcObject = stream;
-                v.autoplay = true;
-                v.muted = true;
-                v.playsinline = true;
-                videoElements.push(v);
-
-                setTimeout(() => {
-                    count++;
-                    actionBtn.disabled = false;
-                    if (count === 3) {
-                        status.innerText = "三人集齊！開始魔幻合成...";
-                        actionBtn.style.display = 'none';
-                        video.style.display = 'none';
-                        startSynthesis();
-                    } else {
-                        status.innerText = `第 ${count} 隻手錄製完成，請換下一位...`;
+        // 當 AI 成功辨識出手的骨架時的處理邏輯
+        hands.onResults((results) => {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            // 畫出目前的鏡頭畫面
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            
+            // 如果 AI 有抓到手，把骨架畫上去
+            if (results.multiHandLandmarks) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    // 畫關節點（紅色）
+                    for (let i = 0; i < landmarks.length; i++) {
+                        const x = landmarks[i].x * canvasElement.width;
+                        const y = landmarks[i].y * canvasElement.height;
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(x, y, 5, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = '#ff7675';
+                        canvasCtx.fill();
                     }
-                }, 3000); // 錄製 3 秒
+                    
+                    // 偵測食指尖端的大概位置（可以用來代表杯子位置）
+                    const fingertip = landmarks[8];
+                    canvasCtx.fillStyle = '#00f5ff';
+                    canvasCtx.font = '16px sans-serif';
+                    canvasCtx.fillText("🍺 Glass Target", fingertip.x * canvasElement.width, fingertip.y * canvasElement.height - 10);
+                }
             }
+            canvasCtx.restore();
+
+            // 如果正在錄製中，把這一幀的畫面存起來
+            if (isRecording) {
+                recordedFrames.push(canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height));
+            }
+        });
+
+        // 啟動相機並連結 AI
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        
+        camera.start().then(() => {
+            statusText.innerText = "AI 準備就緒！請按下按鈕錄製第一個人。";
+            recordBtn.disabled = false;
+        });
+
+        // 錄影按鈕邏輯
+        let clickCount = 0;
+        recordBtn.onclick = () => {
+            if (clickCount >= 3) return;
+            
+            isRecording = true;
+            recordedFrames = [];
+            recordBtn.disabled = true;
+            clickCount++;
+            statusText.innerText = `正在錄製第 ${clickCount} 個人 (帶 AI 骨架)...`;
+
+            setTimeout(() => {
+                isRecording = false;
+                finalVideos.push([...recordedFrames]); // 存下錄好的影像片段
+                recordBtn.disabled = false;
+
+                if (clickCount === 3) {
+                    statusText.innerText = "三人集齊！正在進行網頁端動態重疊...";
+                    recordBtn.style.display = 'none';
+                    startUltimateCheers();
+                } else {
+                    statusText.innerText = `第 ${clickCount} 個人錄製完畢，請換下一位。`;
+                }
+            }, 3000); // 錄製 3 秒
         };
 
-        function startSynthesis() {
-            canvas.style.display = 'inline-block';
-            canvas.width = 640;
-            canvas.height = 480;
-
-            function drawFrame() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 最終魔幻拼貼（把三個帶有 AI 骨架的影片影格同時疊加）
+        function startUltimateCheers() {
+            let frameIndex = 0;
+            
+            function playMix() {
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
                 
-                // 畫背景 (隨便塗個夜店風顏色)
-                ctx.fillStyle = '#1e1e24';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // 炫彩背景
+                canvasCtx.fillStyle = '#0a0a0f';
+                canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
 
-                // 瘋狂拼貼：把三個鏡頭畫面，用不同的位置和半透明度疊在一起（透視怪怪的精髓）
-                if(videoElements[0]) ctx.drawImage(videoElements[0], 0, 100, 300, 300);
-                if(videoElements[1]) ctx.drawImage(videoElements[1], 340, 100, 300, 300);
-                if(videoElements[2]) ctx.drawImage(videoElements[2], 170, 0, 300, 300);
+                // 同時讀取三個影片的當前影格並拼貼
+                finalVideos.forEach((videoFrames, i) => {
+                    if (videoFrames[frameIndex]) {
+                        // 建立一個暫存的畫布來放這一格畫面，方便縮放調整
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = 640;
+                        tempCanvas.height = 480;
+                        tempCanvas.getContext('2d').putImageData(videoFrames[frameIndex], 0, 0);
 
-                // 加個乾杯字樣
-                ctx.fillStyle = '#ffff00';
-                ctx.font = 'bold 40px Arial';
-                ctx.fillText('CHEERS!! 🍻', 200, 430);
+                        // 故意讓三個畫面交錯疊加（達成透視怪怪但好玩的拼貼效果）
+                        if (i === 0) canvasCtx.drawImage(tempCanvas, 0, 100, 320, 240);
+                        if (i === 1) canvasCtx.drawImage(tempCanvas, 320, 100, 320, 240);
+                        if (i === 2) canvasCtx.drawImage(tempCanvas, 160, 0, 320, 240);
+                    }
+                });
 
-                requestAnimationFrame(drawFrame);
+                // 跑馬燈字樣
+                canvasCtx.fillStyle = '#00cec9';
+                canvasCtx.font = 'bold 36px sans-serif';
+                canvasCtx.fillText('🚀 AI CYBER CHEERS 🍻', 120, 420);
+
+                frameIndex++;
+                // 循環播放
+                if (frameIndex >= finalVideos[0].length) {
+                    frameIndex = 0;
+                }
+                setTimeout(playMix, 33); // 逼近 30 FPS 的播放速度
             }
-            drawFrame();
+            playMix();
         }
     </script>
 </body>
