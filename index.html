@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>終極霓虹火柴人 - 卡通線條版</title>
+    <title>stickfamily</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -200,23 +200,24 @@
                     }
                 }
 
-                // --- 嘴巴繪製：完全取自左右嘴角端點（61 與 291）連線 ---
-                const leftCorner = landmarks[61];
-                const rightCorner = landmarks[291];
+                // --- 嘴巴繪製：純粹嘴角端點連線（完美同步旋轉與歪頭） ---
+                const leftCorner = landmarks[61];   // 左嘴角
+                const rightCorner = landmarks[291]; // 右嘴角
 
                 if (leftCorner && rightCorner) {
-                    // 為了微調高度（讓它看起來往上移、比較可愛），我們讓兩角都往眼睛的高度靠攏一點
-                    const eyeY = (landmarks[133].y + landmarks[362].y) / 2;
-                    const shift = 0.25; // 往上拉近 25% 的反差萌高度
-                    
+                    // 如果你想讓嘴巴稍微往上提一點，看起來比較卡通、人中比較短：
+                    // 我們可以讓嘴巴的 Y 座標直接乘以 0.97（在畫布座標中，數值變小代表往上移動）
+                    // 這樣它不依賴眼睛，頭轉到哪，這條線的斜率就絕對跟著轉到哪！
+                    const heightOffset = 0.97; 
+
                     const startX = leftCorner.x * w;
-                    const startY = (leftCorner.y - (leftCorner.y - eyeY) * shift) * h;
+                    const startY = leftCorner.y * h * heightOffset;
                     const endX = rightCorner.x * w;
-                    const endY = (rightCorner.y - (rightCorner.y - eyeY) * shift) * h;
+                    const endY = rightCorner.y * h * heightOffset;
 
                     canvasCtx.beginPath();
                     canvasCtx.moveTo(startX, startY);
-                    canvasCtx.lineTo(endX, endY); // 照你的要求：左右端點直接連成直線
+                    canvasCtx.lineTo(endX, endY); // 真正的左右嘴角兩點連線
                     canvasCtx.stroke();
                 }
             }
